@@ -59,7 +59,9 @@ module FlyoverSubscriptions
       @customer ||= if self.stripe_customer_token.present? 
         ::Stripe::Customer.retrieve(self.stripe_customer_token)
       else
-        ::Stripe::Customer.create(description: subscriber.email, email: subscriber.email, plan: plan.stripe_id, card: stripe_card_token)
+        params = {description: subscriber.email, email: subscriber.email, plan: plan.stripe_id, card: stripe_card_token}
+        params[:coupon] = coupon unless coupon.blank?
+        ::Stripe::Customer.create(params)
       end
     rescue => e
       handle_exception(e)
@@ -92,6 +94,10 @@ module FlyoverSubscriptions
       elsif self.archived? || self.will_cancel?
         resubscribe_to_stripe
       elsif self.plan.present?
+        if subscriber.respond_to?(:can_update_subscription_to_plan?) && !subscriber.can_update_subscription_to_plan?(self, plan)
+          return false 
+        end
+        
         customer.update_subscription(plan: self.plan.stripe_id, prorate: true)
       end
     rescue => e
